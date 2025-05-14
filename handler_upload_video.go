@@ -85,9 +85,22 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	videoKey := base64.RawURLEncoding.EncodeToString(randomBytes)
 
+	videoRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get video ratio", err)
+		return
+	}
+
+	aspectRatio := "other"
+	if videoRatio == "16:9" {
+		aspectRatio = "landscape"
+	} else if videoRatio == "9:16" {
+		aspectRatio = "portrait"
+	}
+
 	_, err = cfg.s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
-		Key:         aws.String(videoKey),
+		Key:         aws.String(aspectRatio + "/" + videoKey),
 		Body:        tempFile,
 		ContentType: aws.String(mediaType),
 	})
@@ -96,7 +109,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	newURL := "https://" + cfg.s3Bucket + ".s3." + cfg.s3Region + ".amazonaws.com/" + videoKey
+	newURL := "https://" + cfg.s3Bucket + ".s3." + cfg.s3Region + ".amazonaws.com/" + aspectRatio + "/" + videoKey
 	metadata.VideoURL = &newURL
 
 	err = cfg.db.UpdateVideo(metadata)

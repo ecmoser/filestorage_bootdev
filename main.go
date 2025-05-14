@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -30,6 +34,42 @@ type apiConfig struct {
 type thumbnail struct {
 	data      []byte
 	mediaType string
+}
+
+func getVideoAspectRatio(videoPath string) (string, error) {
+	videoData, err := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", videoPath).Output()
+	if err != nil {
+		return "", err
+	}
+
+	var videoJSON struct {
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+
+	err = json.Unmarshal(videoData, &videoJSON)
+	if err != nil {
+		return "", err
+	}
+
+	if len(videoJSON.Streams) == 0 {
+		return "", errors.New("no streams found in video")
+	}
+
+	videoRatio := videoJSON.Streams[0].Width / videoJSON.Streams[0].Height
+	fmt.Println(videoRatio)
+
+	if videoRatio == 16/9 {
+		return "16:9", nil
+	}
+
+	if videoRatio == 9/16 {
+		return "9:16", nil
+	}
+
+	return "other", nil
 }
 
 func main() {
